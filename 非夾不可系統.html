@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>非夾不可後台帳務核對系統 (雲端同步版)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .sidebar-active { background-color: #3b82f6 !important; color: white !important; }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
+    </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-slate-800 text-white flex justify-between items-center px-6 py-3 shadow-md sticky top-0 z-30">
+        <div class="flex items-center space-x-3">
+            <i class="fa-solid font-bold text-2xl text-blue-400 fa-store"></i>
+            <h1 class="text-xl font-bold tracking-wide">非夾不可後台帳務核對系統</h1>
+        </div>
+        <div class="flex items-center space-x-4">
+            <!-- 雲端同步狀態與手動同步按鈕 -->
+            <button onclick="syncWithCloud()" id="syncBtn" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-sm">
+                <i class="fa-solid fa-cloud-arrow-up" id="syncIcon"></i>
+                <span id="syncText">雲端同步正常</span>
+            </button>
+
+            <!-- 多分店切換 -->
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid fa-location-dot text-yellow-400"></i>
+                <label for="storeSelect" class="text-sm font-medium">當前分店：</label>
+                <select id="storeSelect" onchange="switchStore()" class="bg-slate-700 text-white rounded px-3 py-1 text-sm border border-slate-600 focus:outline-none">
+                    <option value="store_main">總店 (旗艦店)</option>
+                    <option value="store_ximen">西門分店</option>
+                    <option value="store_fengjia">逢甲分店</option>
+                </select>
+            </div>
+
+            <!-- 角色權限切換 -->
+            <div class="flex items-center space-x-2 bg-slate-700 px-3 py-1 rounded-lg border border-slate-600">
+                <i class="fa-solid fa-user-shield text-blue-400"></i>
+                <span class="text-sm">切換角色：</span>
+                <select id="roleSelect" onchange="switchRole()" class="bg-slate-800 text-white rounded px-2 py-1 text-sm border border-slate-500 focus:outline-none">
+                    <option value="boss">會計 / 店長 (全部權限)</option>
+                    <option value="warehouse">倉管 (除叫貨與審核外皆有)</option>
+                    <option value="buyer">採購 (僅叫貨頁面)</option>
+                </select>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- 側邊選單 -->
+        <aside class="w-64 bg-slate-900 text-slate-300 flex flex-col justify-between p-4 shadow-lg shrink-0">
+            <nav class="space-y-1 overflow-y-auto max-h-[calc(100vh-100px)]">
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 mb-2">系統模組</div>
+                
+                <button onclick="switchTab('tab-purchase')" id="nav-purchase" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800 sidebar-active">
+                    <i class="fa-solid fa-cart-flatbed w-5 text-center"></i>
+                    <span class="font-medium">預定進貨表 (叫貨)</span>
+                </button>
+
+                <button onclick="switchTab('tab-stock')" id="nav-stock" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-boxes-stacked w-5 text-center"></i>
+                    <span class="font-medium">庫存與出入庫管理</span>
+                </button>
+
+                <button onclick="switchTab('tab-stocktake')" id="nav-stocktake" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-clipboard-check w-5 text-center"></i>
+                    <span class="font-medium">實際盤點與盤差</span>
+                </button>
+
+                <button onclick="switchTab('tab-machines')" id="nav-machines" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-gamepad w-5 text-center"></i>
+                    <span class="font-medium">機台每日幣量與分析</span>
+                </button>
+
+                <button onclick="switchTab('tab-supplier')" id="nav-supplier" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-truck-field w-5 text-center"></i>
+                    <span class="font-medium">廠商進貨明細表</span>
+                </button>
+
+                <button onclick="switchTab('tab-payment-check')" id="nav-payment-check" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-file-invoice-dollar w-5 text-center"></i>
+                    <span class="font-medium">貨款與進貨金額核對</span>
+                </button>
+
+                <button onclick="switchTab('tab-cashflow')" id="nav-cashflow" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-vault w-5 text-center"></i>
+                    <span class="font-medium">現金流核對</span>
+                </button>
+
+                <button onclick="switchTab('tab-accounting')" id="nav-accounting" class="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition hover:bg-slate-800">
+                    <i class="fa-solid fa-calculator w-5 text-center"></i>
+                    <span class="font-medium">會計損益與月報表</span>
+                </button>
+            </nav>
+
+            <div class="border-t border-slate-800 pt-4 text-xs text-slate-500 text-center">
+                非夾不可管理系統 v4.4 (雲端版)<br>© 2026 保留所有權利
+            </div>
+        </aside>
+
+        <!-- 主內容區 -->
+        <main class="flex-1 overflow-y-auto p-6 space-y-6">
+
+            <!-- 1. 預定進貨表 (叫貨) -->
+            <section id="tab-purchase" class="space-y-4">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">預定進貨表</h2>
+                        <p class="text-sm text-slate-500">管理採購訂單、到貨登記與審核狀態</p>
+                    </div>
+                    <button onclick="openPurchaseModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>新增叫貨訂單</span>
+                    </button>
+                </div>
+
+                <div id="unstockedAlert" class="hidden bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg shadow-sm">
+                    <div class="flex items-center space-x-3">
+                        <i class="fa-solid fa-triangle-exclamation text-amber-600 text-xl"></i>
+                        <div>
+                            <h4 class="font-bold text-amber-800">警示：貨品已到貨，尚未完成入庫！</h4>
+                            <p id="unstockedAlertText" class="text-sm text-amber-700"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-slate-600">狀態篩選：</label>
+                        <select id="filterPurchaseStatus" onchange="renderPurchaseTable()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="all">全部狀態</option>
+                            <option value="待到貨">待到貨</option>
+                            <option value="已到貨未入庫">已到貨未入庫</option>
+                            <option value="高額待審核">高額待審核</option>
+                            <option value="已完放入庫">已完放入庫</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <label class="text-sm font-medium text-slate-600">廠商搜尋：</label>
+                        <input type="text" id="filterPurchaseSupplier" oninput="renderPurchaseTable()" placeholder="輸入廠商名稱..." class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">訂單號/日期</th>
+                                <th class="p-3">廠商</th>
+                                <th class="p-3">商品/規格</th>
+                                <th class="p-3">數量 / 單價</th>
+                                <th class="p-3">總金額</th>
+                                <th class="p-3">付款日期</th>
+                                <th class="p-3">到貨/登記人</th>
+                                <th class="p-3">狀態</th>
+                                <th class="p-3 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="purchaseTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 2. 庫存與出入庫管理 -->
+            <section id="tab-stock" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">庫存與出入庫管理</h2>
+                        <p class="text-sm text-slate-500">庫存查詢、刷碼快速搜尋與出庫管理</p>
+                    </div>
+                    <button onclick="openOutstockModal()" class="bg-rose-600 hover:bg-rose-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-boxes-packing"></i>
+                        <span>商品出庫登記</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center">
+                    <div class="flex-1 min-w-[280px] relative">
+                        <i class="fa-solid fa-barcode absolute left-3 top-3 text-slate-400"></i>
+                        <input type="text" id="stockSearchInput" oninput="renderStockTable()" placeholder="關鍵字模糊搜尋或直接刷條碼..." class="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm">
+                    </div>
+                    <div>
+                        <select id="stockUsageFilter" onchange="renderStockTable()" class="border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="all">全部用途</option>
+                            <option value="機台貨">機台貨</option>
+                            <option value="夾換台">夾換台</option>
+                            <option value="點數兌換">點數兌換</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">條碼</th>
+                                <th class="p-3">商品名稱 / 規格</th>
+                                <th class="p-3">用途</th>
+                                <th class="p-3">區域</th>
+                                <th class="p-3">廠商</th>
+                                <th class="p-3">成本單價</th>
+                                <th class="p-3">當前庫存</th>
+                                <th class="p-3">預警狀態</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 3. 實際盤點與盤差 -->
+            <section id="tab-stocktake" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">每月庫存實際盤點</h2>
+                        <p class="text-sm text-slate-500">依區域（1F、機台商品、B2、點數兌換區、夾換台區）計算盤差數量與損益金額</p>
+                    </div>
+                    <button onclick="saveStocktake()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-floppy-disk"></i>
+                        <span>儲存盤點結果</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center space-x-4">
+                    <label class="text-sm font-semibold text-slate-700">選擇盤點區域：</label>
+                    <select id="stocktakeZoneFilter" onchange="renderStocktakeTable()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-slate-50 font-medium">
+                        <option value="1F">1F</option>
+                        <option value="機台商品">機台商品</option>
+                        <option value="B2">B2</option>
+                        <option value="點數兌換區">點數兌換區</option>
+                        <option value="夾換台區">夾換台區</option>
+                    </select>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">商品名稱</th>
+                                <th class="p-3">單價</th>
+                                <th class="p-3">系統帳面庫存</th>
+                                <th class="p-3">實際盤點數量</th>
+                                <th class="p-3">盤差數量 (實-帳)</th>
+                                <th class="p-3">盤差金額損益</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stocktakeTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 4. 機台每日幣量與分析 -->
+            <section id="tab-machines" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">機台每日幣量與效益分析</h2>
+                        <p class="text-sm text-slate-500">匯入每日幣量、批次 Key in 換點資料與效益淨利計算</p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                        <button onclick="downloadMachineCSVTemplate()" class="bg-slate-600 hover:bg-slate-700 text-white px-3 py-2 rounded-lg text-sm flex items-center space-x-1">
+                            <i class="fa-solid fa-download"></i>
+                            <span>下載幣量範本</span>
+                        </button>
+                        <button onclick="openMachineUploadModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center space-x-1">
+                            <i class="fa-solid fa-file-import"></i>
+                            <span>匯入幣量 CSV</span>
+                        </button>
+                        <button onclick="openPointsModal()" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded-lg text-sm font-medium shadow-sm flex items-center space-x-1">
+                            <i class="fa-solid fa-keyboard"></i>
+                            <span>批次 Key in 換點資料</span>
+                        </button>
+                        <button onclick="exportMachinesReport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm flex items-center space-x-1">
+                            <i class="fa-solid fa-file-excel"></i>
+                            <span>匯出分析 CSV</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                    <div class="flex items-center space-x-4">
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-magnifying-glass text-slate-400"></i>
+                            <label class="text-sm font-medium text-slate-700">商品搜尋：</label>
+                            <input type="text" id="machineSearchInput" oninput="renderMachinesTable()" placeholder="關鍵字..." class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm w-40">
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <i class="fa-solid fa-arrow-sort text-blue-500"></i>
+                            <label class="text-sm font-semibold text-slate-700">排序方式：</label>
+                            <select id="machineSortSelect" onchange="renderMachinesTable()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-blue-50 font-medium text-blue-800">
+                                <option value="date_desc">日期 (新 → 舊)</option>
+                                <option value="date_asc">日期 (舊 → 新)</option>
+                                <option value="rev_desc">收入金額 (高 → 低)</option>
+                                <option value="net_desc">淨利 (高 → 低)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-semibold text-slate-700">日期：</span>
+                        <input type="date" id="machineStartDate" onchange="renderMachinesTable()" class="border border-slate-300 rounded px-2 py-1 text-sm">
+                        <span>至</span>
+                        <input type="date" id="machineEndDate" onchange="renderMachinesTable()" class="border border-slate-300 rounded px-2 py-1 text-sm">
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">日期</th>
+                                <th class="p-3">機檯編號</th>
+                                <th class="p-3">商品名稱</th>
+                                <th class="p-3">收入金額</th>
+                                <th class="p-3">今日出錶結算</th>
+                                <th class="p-3">點數/兌換量</th>
+                                <th class="p-3">商品成本</th>
+                                <th class="p-3">出貨金額(刮獎)</th>
+                                <th class="p-3">淨利</th>
+                            </tr>
+                        </thead>
+                        <tbody id="machinesTableBody" class="divide-y divide-slate-100"></tbody>
+                        <tfoot id="machinesTableFooter" class="bg-slate-100 font-bold border-t-2 border-slate-300 divide-y divide-slate-200"></tfoot>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 5. 廠商進貨明細表 -->
+            <section id="tab-supplier" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">廠商進貨明細表</h2>
+                        <p class="text-sm text-slate-500">按廠商與月份統計叫貨總額與每筆詳細數據</p>
+                    </div>
+                    <button onclick="exportSupplierReport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>匯出廠商明細 CSV</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-center space-x-4">
+                    <span class="text-sm font-semibold text-slate-700">選擇叫貨月份：</span>
+                    <input type="month" id="supplierMonthFilter" value="2026-10" onchange="renderSupplierReport()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                </div>
+
+                <div id="supplierTotalCard" class="bg-blue-50 border border-blue-200 p-4 rounded-xl flex justify-between items-center">
+                    <div>
+                        <div class="text-sm text-blue-600 font-medium">當月所有廠商總金額</div>
+                        <div id="supplierTotalAmount" class="text-2xl font-bold text-blue-900">$0</div>
+                    </div>
+                    <div id="supplierTotalCount" class="text-sm text-blue-700 font-medium">總叫貨筆數：0 筆</div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">廠商名稱</th>
+                                <th class="p-3">訂單編號</th>
+                                <th class="p-3">訂購日期</th>
+                                <th class="p-3">商品名稱 (規格)</th>
+                                <th class="p-3">訂購數量</th>
+                                <th class="p-3">單價</th>
+                                <th class="p-3">總金額</th>
+                                <th class="p-3">到貨登記人</th>
+                            </tr>
+                        </thead>
+                        <tbody id="supplierReportTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 6. 貨款與進貨實際金額核對 -->
+            <section id="tab-payment-check" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">貨款與進貨實際金額核對</h2>
+                        <p class="text-sm text-slate-500">支援從系統訂單帶入或手動自由新增（含貨未到先付款登記）</p>
+                    </div>
+                    <button onclick="openPaymentModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>新增貨款付款紀錄 (支援先付款)</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                        <div class="text-xs text-slate-500 font-medium">系統叫貨總金額</div>
+                        <div id="pcTotalOrderAmt" class="text-2xl font-bold text-slate-800">$0</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                        <div class="text-xs text-slate-500 font-medium">實際已付貨款總額</div>
+                        <div id="pcTotalPaidAmt" class="text-2xl font-bold text-emerald-600">$0</div>
+                    </div>
+                    <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                        <div class="text-xs text-slate-500 font-medium">未付清尾款 (應付帳款)</div>
+                        <div id="pcTotalUnpaidAmt" class="text-2xl font-bold text-rose-600">$0</div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">記錄日期</th>
+                                <th class="p-3">廠商名稱</th>
+                                <th class="p-3">對應單號</th>
+                                <th class="p-3">到貨日</th>
+                                <th class="p-3">實際到貨金額</th>
+                                <th class="p-3">實際支付金額</th>
+                                <th class="p-3">差額 (到貨-支付)</th>
+                                <th class="p-3">備註說明</th>
+                                <th class="p-3 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="paymentCheckTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 7. 現金流核對 -->
+            <section id="tab-cashflow" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">現金流核對系統</h2>
+                        <p class="text-sm text-slate-500">
+                            現金流 = 前日餘額 + 今日實際幣量收入 - 今日店支出 - 轉入貨款<br>
+                            貨款 = 前日餘額 + 營業額現金轉入 - 當日所有貨款（系統防呆：相同日期自動覆蓋）
+                        </p>
+                    </div>
+                    <button onclick="openCashflowModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-plus"></i>
+                        <span>新增或更新每日現金流</span>
+                    </button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <table class="w-full text-left text-sm">
+                        <thead class="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
+                            <tr>
+                                <th class="p-3">日期</th>
+                                <th class="p-3">前日餘額</th>
+                                <th class="p-3">今日實際幣量收入</th>
+                                <th class="p-3">營業額現金轉入</th>
+                                <th class="p-3">今日店支出</th>
+                                <th class="p-3">轉入貨款</th>
+                                <th class="p-3 font-bold text-blue-600">結算：現金流</th>
+                                <th class="p-3 font-bold text-purple-600">結算：貨款</th>
+                                <th class="p-3 text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cashflowTableBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 8. 會計帳務核對與損益月報表 -->
+            <section id="tab-accounting" class="space-y-4 hidden">
+                <div class="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h2 class="text-xl font-bold text-slate-800">會計帳務核對與損益月報表</h2>
+                        <p class="text-sm text-slate-500">完整涵蓋營收、支出、薪資、庫存變動與總資產損益計算</p>
+                    </div>
+                    <button onclick="exportMonthlyReport()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition flex items-center space-x-2">
+                        <i class="fa-solid fa-file-excel"></i>
+                        <span>匯出月報表 CSV</span>
+                    </button>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap gap-4 items-center justify-between">
+                    <div class="flex items-center space-x-2">
+                        <span class="text-sm font-semibold text-slate-700">月報表月份：</span>
+                        <input type="month" id="accMonthFilter" value="2026-10" onchange="renderAccountingReport()" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-slate-50 font-bold text-blue-800">
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-x-auto p-4">
+                    <table class="w-full text-left text-sm border-collapse border border-slate-200">
+                        <thead class="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                            <tr>
+                                <th class="p-3 border border-slate-200">會計核對欄位</th>
+                                <th class="p-3 border border-slate-200 text-right">金額 / 數值 (元)</th>
+                                <th class="p-3 border border-slate-200">說明與連動來源</th>
+                            </tr>
+                        </thead>
+                        <tbody id="accountingFullTableBody" class="divide-y divide-slate-200">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-3">
+                    <h3 class="font-bold text-slate-800">新增月報表雜項支出 (如：員工薪資、其他店支出等)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                        <input type="text" id="expenseName" placeholder="支出名稱 (如：10月員工薪資)" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                        <select id="expenseCategory" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                            <option value="店支出">店支出 (-)</option>
+                            <option value="員工薪資">員工薪資 (-)</option>
+                            <option value="免費幣">免費幣 (-)</option>
+                            <option value="其他收入">其他收入 (+)</option>
+                        </select>
+                        <input type="number" id="expenseAmount" placeholder="金額" class="border border-slate-300 rounded-lg px-3 py-1.5 text-sm">
+                        <button onclick="addStoreExpense()" class="bg-slate-800 hover:bg-slate-900 text-white rounded-lg px-4 py-1.5 text-sm font-medium">新增帳款紀錄</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- 彈窗：新增叫貨訂單 Modal -->
+    <div id="purchaseModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">新增預定叫貨訂單 (全新貨品)</h3>
+                <button onclick="closePurchaseModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="addPurchaseOrder(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">商品名稱 *</label>
+                    <input type="text" id="pProductName" required placeholder="例如：45cm 巨無霸娃娃" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">規格</label>
+                        <input type="text" id="pSpec" placeholder="例如：粉紅色" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">廠商名稱 * (可選或手動Key)</label>
+                        <input list="supplierDatalist" id="pSupplier" required placeholder="手動Key或下拉選擇廠商..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-blue-50 font-medium text-blue-900">
+                        <datalist id="supplierDatalist"></datalist>
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">訂購數量 *</label>
+                        <input type="number" id="pQty" required min="1" value="50" oninput="calcPMoney()" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">單價 *</label>
+                        <input type="number" id="pPrice" required min="0" value="250" oninput="calcPMoney()" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">總金額</label>
+                        <input type="number" id="pTotal" readonly class="w-full bg-slate-100 border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">訂貨日期</label>
+                        <input type="date" id="pOrderDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">用途分類 *</label>
+                        <select id="pUsage" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                            <option value="機台貨">機台貨 (預警 &lt; 50)</option>
+                            <option value="夾換台">夾換台 (預警 ≤ 3)</option>
+                            <option value="點數兌換">點數兌換 (預警 ≤ 3)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closePurchaseModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">送出叫貨單</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 彈窗：到貨與入庫區域選擇 Modal -->
+    <div id="arriveModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">貨品到貨與入庫區域選擇</h3>
+                <button onclick="closeArriveModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="submitArrival(event)" class="p-6 space-y-4">
+                <input type="hidden" id="arriveOrderId">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">到貨日期 *</label>
+                    <input type="date" id="arriveDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">入庫歸類區域 *</label>
+                    <select id="arriveZone" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-blue-50 font-medium text-blue-900">
+                        <option value="1F">1F</option>
+                        <option value="機台商品">機台商品</option>
+                        <option value="B2">B2</option>
+                        <option value="點數兌換區">點數兌換區</option>
+                        <option value="夾換台區">夾換台區</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">到貨登記人 * (未填寫不可送出)</label>
+                    <input type="text" id="arrivePerson" required placeholder="請輸入點收人員姓名" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">付款日期</label>
+                    <input type="date" id="payDate" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeArriveModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium">確認到貨並入庫</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 彈窗：出庫登記 Modal -->
+    <div id="outstockModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">商品出庫登記</h3>
+                <button onclick="closeOutstockModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="submitOutstock(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">搜尋庫存商品 (關鍵字/條碼) *</label>
+                    <input type="text" id="outSearch" oninput="searchOutProducts()" placeholder="輸入搜尋商品..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    <select id="outProductSelect" size="3" required class="w-full border border-slate-300 rounded-lg mt-1 text-sm p-1"></select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">出庫數量 *</label>
+                    <input type="number" id="outQty" required min="1" value="1" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">出庫原因 (可選擇或手動輸入) *</label>
+                    <div class="flex space-x-2 mb-2">
+                        <select id="outReasonSelect" onchange="onSelectOutReason()" class="w-full border border-slate-300 rounded-lg px-3 py-1.5 text-sm bg-slate-50">
+                            <option value="">-- 快速選擇原因清單 --</option>
+                            <option value="活動支出">活動支出</option>
+                            <option value="點數兌換">點數兌換</option>
+                            <option value="刮板獎">刮板獎</option>
+                            <option value="報廢">報廢</option>
+                        </select>
+                    </div>
+                    <input type="text" id="outReason" required placeholder="請選擇或手動輸入出庫原因..." class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeOutstockModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium">確認扣減出庫</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 彈窗：選擇匯入日期 Modal (每日幣量) -->
+    <div id="machineUploadModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">選擇每日幣量數據歸屬日期（同日覆蓋）</h3>
+                <button onclick="closeMachineUploadModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">請選擇此批幣量 CSV 的營業日期 *</label>
+                    <input type="date" id="targetMachineDate" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">選擇幣量 CSV 檔案 (6欄位) *</label>
+                    <input type="file" id="machineCsvFileInput" accept=".csv" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50">
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeMachineUploadModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="button" onclick="confirmMachineCSVUpload()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium">確認並覆蓋匯入</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 彈窗：批次 Key in 換點資料 Modal -->
+    <div id="pointsModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">批次 Key in 換點資料</h3>
+                <button onclick="closePointsModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="submitBatchPoints(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">營業日期 *</label>
+                    <input type="date" id="batchPointsDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">機台號 (例如: 42) *</label>
+                    <input type="text" id="batchPointsMachineNo" required placeholder="輸入機台號" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">換點數 (P) *</label>
+                        <input type="number" id="batchPointsVal" required min="0" value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">兌換量 (個) *</label>
+                        <input type="number" id="batchPointsQty" required min="0" value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500">* 系統將依您填寫的「營業日期」與「機台號」精準帶入對應的機台記錄中！</p>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closePointsModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium">確認帶入機台</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 彈窗：新增貨款付款紀錄 Modal -->
+    <div id="paymentModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">新增貨款與實際金額核對紀錄</h3>
+                <button onclick="closePaymentModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="submitPaymentRecord(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">記錄日期 *</label>
+                    <input type="date" id="payRecDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">快速代入系統訂單 (選填，若貨未到可直接手動填寫下方)</label>
+                    <select id="payRecSelectOrder" onchange="onSelectPurchaseOrderForPayment()" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm bg-slate-50">
+                        <option value="">-- 手動自由輸入 (或選擇現有訂單代入) --</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">廠商名稱 *</label>
+                        <input type="text" id="payRecSupplier" required placeholder="例：光泉" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">對應單號</label>
+                        <input type="text" id="payRecOrderIdInput" placeholder="例：ORD20261001 或 預付訂金" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">到貨日 (貨未到可留空或填預計日)</label>
+                        <input type="date" id="payRecArriveDate" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">實際到貨金額 * (貨未到可填0)</label>
+                        <input type="number" id="payRecOrderAmt" required min="0" value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-slate-700">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">實際支付金額 * (先付款金額)</label>
+                    <input type="number" id="payRecPaidAmt" required min="0" value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm font-bold text-emerald-600">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">備註說明</label>
+                    <input type="text" id="payRecNote" placeholder="例：貨未到先付訂金NT$5000" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closePaymentModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">儲存付款紀錄</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 彈窗：新增現金流帳目 Modal -->
+    <div id="cashflowModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-md overflow-hidden">
+            <div class="bg-slate-800 text-white px-6 py-4 flex justify-between items-center">
+                <h3 class="font-bold">新增每日現金流帳目（同日自動覆蓋）</h3>
+                <button onclick="closeCashflowModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            <form onsubmit="submitCashflowRecord(event)" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">日期 * (若日期已存在將自動更新)</label>
+                    <input type="date" id="cfDate" required class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">前日餘額 *</label>
+                        <input type="number" id="cfPrevBalance" required value="50000" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-1">今日實際幣量收入 *</label>
+                        <input type="number" id="cfMachineRev" required value="10000" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">營業額現金轉入</label>
+                        <input type="number" id="cfCashTransfer" required value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">今日店支出</label>
+                        <input type="number" id="cfExpense" required value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-700 mb-1">轉入貨款 / 貨款</label>
+                        <input type="number" id="cfLoanPayment" required value="0" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <p class="text-xs text-slate-500">
+                    * 現金流 = 前日餘額 + 今日實際幣量收入 - 今日店支出 - 轉入貨款<br>
+                    * 貨款 = 前日餘額 + 營業額現金轉入 - 當日所有貨款
+                </p>
+                <div class="flex justify-end space-x-3 pt-4 border-t border-slate-200">
+                    <button type="button" onclick="closeCashflowModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium">計算並儲存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 刪除二次確認 Modal -->
+    <div id="deleteConfirmModal" class="fixed inset-0 modal-backdrop z-50 flex items-center justify-center hidden">
+        <div class="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center space-y-4">
+            <div class="w-12 h-12 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center mx-auto text-xl">
+                <i class="fa-solid fa-triangle-exclamation"></i>
+            </div>
+            <h3 class="font-bold text-lg text-slate-800">確定要刪除此筆記錄？</h3>
+            <p class="text-sm text-slate-500">此動作為二次確認。</p>
+            <div class="flex justify-center space-x-3 pt-2">
+                <button onclick="closeDeleteModal()" class="px-4 py-2 border border-slate-300 rounded-lg text-sm">取消</button>
+                <button id="confirmDeleteBtn" class="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-sm font-medium">確定刪除</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 🛑 請在此處貼上您剛剛部署好的 Google Apps Script 網頁應用程式 URL 🛑
+        const WEB_APP_URL = "https://script.google.com/macros/s/https://script.google.com/macros/s/AKfycbzq1D8jQiJ_kGfDzExmgd3p_jf5jZ3ZtYrGi8XdrajovKLbgWNz8vX2NhxBHVSoxmpzRw/exec";
+
+        let currentRole = 'boss';
+        let currentStore = 'store_main';
+        let deleteCallback = null;
+
+        let supplierList = [
+            '光泉', '堃富', '福記', '鑫冠宇', '垂坤', '客人許願', '陀螺', '養樂多', 
+            'GK', '豐茶道', '富嘉騰', '湖口傑', '仲毅', '淘寶', '奇奇玩具', '樂虎', '肉蟻'
+        ];
+
+        let purchaseOrders = [];
+        let stockList = [];
+        let machineRecords = [];
+        let storeExpenses = [];
+        let paymentRecords = [];
+        let cashflowRecords = [];
+
+        window.addEventListener('DOMContentLoaded', function() {
+            const today = new Date().toISOString().slice(0, 10);
+            ['pOrderDate', 'arriveDate', 'targetMachineDate', 'batchPointsDate', 'payRecDate', 'cfDate'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.value = today;
+            });
+            
+            // 載入雲端資料
+            loadFromCloud().then(() => {
+                renderSupplierDatalist();
+                renderAll();
+            });
+        });
+
+        // 🔗 從 Google 雲端載入資料
+        async function loadFromCloud() {
+            if (!WEB_APP_URL || WEB_APP_URL.includes("AKfycb...")) {
+                loadDefaultData();
+                return;
+            }
+            try {
+                setSyncStatus('loading', '正在同步雲端...');
+                const res = await fetch(WEB_APP_URL);
+                const json = await res.json();
+                if (json && json.payload) {
+                    const data = json.payload;
+                    supplierList = data.supplierList || supplierList;
+                    purchaseOrders = data.purchaseOrders || [];
+                    stockList = data.stockList || [];
+                    machineRecords = data.machineRecords || [];
+                    storeExpenses = data.storeExpenses || [];
+                    paymentRecords = data.paymentRecords || [];
+                    cashflowRecords = data.cashflowRecords || [];
+                    setSyncStatus('success', '雲端同步正常');
+                } else {
+                    loadDefaultData();
+                }
+            } catch (err) {
+                console.error("載入雲端失敗，使用預設資料", err);
+                loadDefaultData();
+                setSyncStatus('error', '雲端連線失敗(離線模式)');
+            }
+        }
+
+        // 🔗 儲存資料至 Google 雲端
+        async function saveToCloud() {
+            if (!WEB_APP_URL || WEB_APP_URL.includes("AKfycb...")) return;
+            try {
+                setSyncStatus('loading', '儲存中...');
+                const payload = {
+                    supplierList,
+                    purchaseOrders,
+                    stockList,
+                    machineRecords,
+                    storeExpenses,
+                    paymentRecords,
+                    cashflowRecords
+                };
+                await fetch(WEB_APP_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'saveAll', store: currentStore, payload })
+                });
+                setSyncStatus('success', '雲端同步正常');
+            } catch (err) {
+                console.error("儲存雲端失敗", err);
+                setSyncStatus('error', '雲端儲存失敗');
+            }
+        }
+
+        function setSyncStatus(status, text) {
+            const btn = document.getElementById('syncBtn');
+            const icon = document.getElementById('syncIcon');
+            const txt = document.getElementById('syncText');
+            if(!btn) return;
+            txt.innerText = text;
+            if (status === 'loading') {
+                btn.className = "bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-sm";
+                icon.className = "fa-solid fa-spinner fa-spin";
+            } else if (status === 'success') {
+                btn.className = "bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-sm";
+                icon.className = "fa-solid fa-cloud-arrow-up";
+            } else {
+                btn.className = "bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-lg text-sm font-medium flex items-center space-x-2 transition shadow-sm";
+                icon.className = "fa-solid fa-triangle-exclamation";
+            }
+        }
+
+        function syncWithCloud() {
+            loadFromCloud().then(() => {
+                renderSupplierDatalist();
+                renderAll();
+                alert('已成功重新向 Google 雲端同步最新資料！');
+            });
+        }
+
+        function loadDefaultData() {
+            purchaseOrders = [
+                { id: 'ORD20261001', store: 'store_main', name: '45cm 巨無霸娃娃', spec: '粉紅版', supplier: '奇奇玩具', qty: 50, price: 250, total: 12500, usage: '機台貨', orderDate: '2026-10-15', arriveDate: '2026-10-18', arrivePerson: '張小明', payDate: '2026-10-20', status: '已完放入庫', stockedQty: 50, zone: '1F', barcode: '4710001' }
+            ];
+            stockList = [
+                { id: 'STK001', store: 'store_main', name: '45cm 巨無霸娃娃', spec: '粉紅版', supplier: '奇奇玩具', usage: '機台貨', zone: '1F', price: 250, qty: 45, barcode: '4710001' }
+            ];
+            machineRecords = [
+                { date: '2026-10-29', machineNo: '42', productName: '魔音海螺', price: 200, revenue: 2320, outQty: 10, points: 100, exchangeQty: 2, scratchExp: 0, cost: 2000, netProfit: 320 }
+            ];
+            storeExpenses = [
+                { id: 'EXP001', store: 'store_main', date: '2026-10-01', category: '店支出', name: '10月店面房租', amount: 50000 }
+            ];
+            paymentRecords = [
+                { id: 'PAY001', store: 'store_main', date: '2026-10-20', supplier: '奇奇玩具', orderId: 'ORD20261001', arriveDate: '2026-10-18', orderAmt: 12500, paidAmt: 12500, note: '全額付清' }
+            ];
+            cashflowRecords = [
+                { id: 'CF001', store: 'store_main', date: '2026-10-29', prevBalance: 50000, machineRev: 2320, cashTransfer: 5000, expense: 1200, loanPayment: 12500 }
+            ];
+        }
+
+        function renderSupplierDatalist() {
+            const datalist = document.getElementById('supplierDatalist');
+            if(!datalist) return;
+            datalist.innerHTML = '';
+            supplierList.forEach(sup => {
+                datalist.innerHTML += `<option value="${sup}"></option>`;
+            });
+        }
+
+        function checkAndAddSupplier(supplierName) {
+            const name = supplierName.trim();
+            if (name && !supplierList.includes(name)) {
+                supplierList.push(name);
+                renderSupplierDatalist();
+            }
+        }
+
+        function renderAll() {
+            renderPurchaseTable();
+            renderStockTable();
+            renderStocktakeTable();
+            renderMachinesTable();
+            renderSupplierReport();
+            renderPaymentCheckTable();
+            renderCashflowTable();
+            renderAccountingReport();
+            updateNavigationPermissions();
+            saveToCloud(); // 每次異動自動備份並上傳雲端
+        }
+
+        function switchTab(tabId) {
+            ['tab-purchase', 'tab-stock', 'tab-stocktake', 'tab-machines', 'tab-supplier', 'tab-payment-check', 'tab-cashflow', 'tab-accounting'].forEach(id => {
+                const el = document.getElementById(id);
+                if(el) el.classList.add('hidden');
+                const navId = 'nav-' + id.replace('tab-', '');
+                const navEl = document.getElementById(navId);
+                if(navEl) navEl.classList.remove('sidebar-active');
+            });
+            const targetTab = document.getElementById(tabId);
+            if(targetTab) targetTab.classList.remove('hidden');
+            const targetNav = document.getElementById('nav-' + tabId.replace('tab-', ''));
+            if(targetNav) targetNav.classList.add('sidebar-active');
+        }
+
+        function switchRole() {
+            const roleSel = document.getElementById('roleSelect');
+            if(roleSel) currentRole = roleSel.value;
+            renderAll();
+        }
+
+        function switchStore() {
+            const storeSel = document.getElementById('storeSelect');
+            if(storeSel) currentStore = storeSel.value;
+            renderAll();
+        }
+
+        function updateNavigationPermissions() {
+            const navStock = document.getElementById('nav-stock');
+            const navStocktake = document.getElementById('nav-stocktake');
+            const navMachines = document.getElementById('nav-machines');
+            const navSupplier = document.getElementById('nav-supplier');
+            const navPaymentCheck = document.getElementById('nav-payment-check');
+            const navCashflow = document.getElementById('nav-cashflow');
+            const navAccounting = document.getElementById('nav-accounting');
+
+            if (currentRole === 'buyer') {
+                [navStock, navStocktake, navMachines, navSupplier, navPaymentCheck, navCashflow, navAccounting].forEach(n => { if(n) n.style.display = 'none'; });
+                switchTab('tab-purchase');
+            } else if (currentRole === 'warehouse') {
+                [navStock, navStocktake, navMachines, navSupplier].forEach(n => { if(n) n.style.display = 'flex'; });
+                [navPaymentCheck, navCashflow, navAccounting].forEach(n => { if(n) n.style.display = 'none'; });
+            } else {
+                [navStock, navStocktake, navMachines, navSupplier, navPaymentCheck, navCashflow, navAccounting].forEach(n => { if(n) n.style.display = 'flex'; });
+            }
+        }
+
+        function renderPurchaseTable() {
+            const tbody = document.getElementById('purchaseTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            const statusFilter = document.getElementById('filterPurchaseStatus').value;
+            const supplierFilter = document.getElementById('filterPurchaseSupplier').value.toLowerCase();
+            let unstockedCount = 0;
+
+            purchaseOrders.filter(o => o.store === currentStore).forEach(o => {
+                if (o.status === '已到貨未入庫') unstockedCount++;
+                if (statusFilter !== 'all' && o.status !== statusFilter) return;
+                if (supplierFilter && !o.supplier.toLowerCase().includes(supplierFilter)) return;
+
+                let statusBadge = '';
+                if (o.status === '待到貨') statusBadge = `<span class="bg-slate-100 text-slate-600 px-2 py-1 rounded text-xs">待到貨</span>`;
+                else if (o.status === '已到貨未入庫') statusBadge = `<span class="bg-amber-100 text-amber-700 px-2 py-1 rounded text-xs font-bold animate-pulse">已到貨未入庫</span>`;
+                else if (o.status === '高額待審核') statusBadge = `<span class="bg-purple-100 text-purple-700 px-2 py-1 rounded text-xs font-bold">高額待審核 (&gt;3萬)</span>`;
+                else if (o.status === '已完放入庫') statusBadge = `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs">已完放入庫 (${o.zone || '1F'})</span>`;
+
+                let actionBtns = '';
+                if (o.status === '待_到貨' || o.status === '待到貨') {
+                    actionBtns = `<button onclick="openArriveModal('${o.id}')" class="text-blue-600 hover:underline mr-2 font-medium">登記到貨</button>`;
+                } else if (o.status === '已到貨未入庫') {
+                    actionBtns = `<button onclick="openArriveModal('${o.id}')" class="text-emerald-600 hover:underline font-bold mr-2">執行入庫</button>`;
+                } else if (o.status === '高額待審核') {
+                    if (currentRole === 'boss') {
+                        actionBtns = `<button onclick="approveHighAmount('${o.id}')" class="text-purple-600 hover:underline font-bold mr-2">審核通過</button>`;
+                    } else {
+                        actionBtns = `<span class="text-xs text-slate-400 mr-2">限店長審核</span>`;
+                    }
+                }
+
+                if (currentRole === 'boss') {
+                    actionBtns += `<button onclick="confirmDelete('purchase', '${o.id}')" class="text-rose-600 hover:underline font-medium">刪除</button>`;
+                }
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3"><div class="font-bold">${o.id}</div><div class="text-xs text-slate-400">${o.orderDate}</div></td>
+                        <td class="p-3 font-semibold text-slate-800">${o.supplier}</td>
+                        <td class="p-3"><div class="font-medium">${o.name}</div><div class="text-xs text-slate-400">${o.spec || '-'} (${o.usage})</div></td>
+                        <td class="p-3">${o.qty} / $${o.price}</td>
+                        <td class="p-3 font-bold text-slate-700">$${o.total.toLocaleString()}</td>
+                        <td class="p-3">${o.payDate || '-'}</td>
+                        <td class="p-3"><div>${o.arriveDate || '-'}</div><div class="text-xs text-slate-400">${o.arrivePerson || '-'}</div></td>
+                        <td class="p-3">${statusBadge}</td>
+                        <td class="p-3 text-right">${actionBtns}</td>
+                    </tr>
+                `;
+            });
+
+            const alertBox = document.getElementById('unstockedAlert');
+            if (unstockedCount > 0) {
+                alertBox.classList.remove('hidden');
+                document.getElementById('unstockedAlertText').innerText = `目前有 ${unstockedCount} 筆貨品已到達店面，請倉管儘速核對並選擇歸類區域完成入庫！`;
+            } else {
+                alertBox.classList.add('hidden');
+            }
+        }
+
+        function openPurchaseModal() { document.getElementById('purchaseModal').classList.remove('hidden'); }
+        function closePurchaseModal() { document.getElementById('purchaseModal').classList.add('hidden'); }
+        function calcPMoney() {
+            const q = document.getElementById('pQty').value || 0;
+            const p = document.getElementById('pPrice').value || 0;
+            document.getElementById('pTotal').value = q * p;
+        }
+
+        function addPurchaseOrder(e) {
+            e.preventDefault();
+            const q = parseInt(document.getElementById('pQty').value);
+            const p = parseInt(document.getElementById('pPrice').value);
+            const supplierInput = document.getElementById('pSupplier').value.trim();
+
+            if (!supplierInput) { alert('請填寫或選擇廠商名稱！'); return; }
+            checkAndAddSupplier(supplierInput);
+
+            const order = {
+                id: 'ORD' + new Date().getTime().toString().slice(-6),
+                store: currentStore,
+                name: document.getElementById('pProductName').value,
+                spec: document.getElementById('pSpec').value,
+                supplier: supplierInput,
+                qty: q,
+                price: p,
+                total: q * p,
+                usage: document.getElementById('pUsage').value,
+                orderDate: document.getElementById('pOrderDate').value,
+                arriveDate: '', arrivePerson: '', payDate: '',
+                status: '待到貨', stockedQty: 0, zone: '1F',
+                barcode: '471' + Math.floor(1000 + Math.random() * 9000)
+            };
+            purchaseOrders.unshift(order);
+            closePurchaseModal();
+            renderAll();
+        }
+
+        function openArriveModal(id) {
+            document.getElementById('arriveOrderId').value = id;
+            document.getElementById('arriveModal').classList.remove('hidden');
+        }
+        function closeArriveModal() { document.getElementById('arriveModal').classList.add('hidden'); }
+
+        function submitArrival(e) {
+            e.preventDefault();
+            const id = document.getElementById('arriveOrderId').value;
+            const person = document.getElementById('arrivePerson').value.trim();
+            const zone = document.getElementById('arriveZone').value;
+            if (!person) { alert('請填寫到貨登記人！'); return; }
+
+            const order = purchaseOrders.find(o => o.id === id);
+            if (order) {
+                order.arriveDate = document.getElementById('arriveDate').value;
+                order.arrivePerson = person;
+                order.payDate = document.getElementById('payDate').value;
+                order.zone = zone;
+
+                if (order.total > 30000 && order.status === '待到貨') {
+                    order.status = '高額待審核';
+                    closeArriveModal();
+                    renderAll();
+                    return;
+                }
+
+                order.status = '已完放入庫';
+                order.stockedQty = order.qty;
+
+                let stock = stockList.find(s => s.store === currentStore && s.name === order.name && s.spec === order.spec);
+                if (stock) {
+                    stock.qty += order.qty;
+                    stock.zone = zone;
+                } else {
+                    stockList.push({
+                        id: 'STK' + new Date().getTime().toString().slice(-4),
+                        store: currentStore,
+                        name: order.name,
+                        spec: order.spec,
+                        supplier: order.supplier,
+                        usage: order.usage,
+                        zone: zone,
+                        price: order.price,
+                        qty: order.qty,
+                        barcode: order.barcode
+                    });
+                }
+            }
+            closeArriveModal();
+            renderAll();
+        }
+
+        function approveHighAmount(id) {
+            const order = purchaseOrders.find(o => o.id === id);
+            if (order) {
+                order.status = '已到貨未入庫';
+                renderAll();
+            }
+        }
+
+        function renderStockTable() {
+            const tbody = document.getElementById('stockTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            const keyword = document.getElementById('stockSearchInput').value.toLowerCase().trim();
+            const usageFilter = document.getElementById('stockUsageFilter').value;
+
+            stockList.filter(s => s.store === currentStore).forEach(s => {
+                if (usageFilter !== 'all' && s.usage !== usageFilter) return;
+                if (keyword && !s.name.toLowerCase().includes(keyword) && !s.barcode.toLowerCase().includes(keyword) && !(s.spec && s.spec.toLowerCase().includes(keyword))) return;
+
+                let isLow = (s.usage === '機台貨' && s.qty < 50) || (s.usage !== '機台貨' && s.qty <= 3);
+                let alertBadge = isLow 
+                    ? `<span class="bg-rose-100 text-rose-700 font-bold px-2 py-1 rounded text-xs animate-bounce">庫存不足</span>`
+                    : `<span class="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs">正常</span>`;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 font-mono text-xs text-slate-500">${s.barcode}</td>
+                        <td class="p-3"><div class="font-medium text-slate-800">${s.name}</div><div class="text-xs text-slate-400">${s.spec || '-'}</div></td>
+                        <td class="p-3"><span class="bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-xs">${s.usage}</span></td>
+                        <td class="p-3"><span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-bold">${s.zone || '1F'}</span></td>
+                        <td class="p-3 text-slate-600">${s.supplier}</td>
+                        <td class="p-3 font-semibold">$${s.price}</td>
+                        <td class="p-3 font-bold text-lg ${isLow ? 'text-rose-600' : 'text-slate-700'}">${s.qty}</td>
+                        <td class="p-3">${alertBadge}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openOutstockModal() {
+            searchOutProducts();
+            document.getElementById('outReason').value = '';
+            document.getElementById('outReasonSelect').value = '';
+            document.getElementById('outstockModal').classList.remove('hidden');
+        }
+        function closeOutstockModal() { document.getElementById('outstockModal').classList.add('hidden'); }
+
+        function onSelectOutReason() {
+            const selVal = document.getElementById('outReasonSelect').value;
+            if (selVal) document.getElementById('outReason').value = selVal;
+        }
+
+        function searchOutProducts() {
+            const query = document.getElementById('outSearch').value.toLowerCase();
+            const select = document.getElementById('outProductSelect');
+            if(!select) return;
+            select.innerHTML = '';
+
+            stockList.filter(s => s.store === currentStore).forEach(s => {
+                if (!query || s.name.toLowerCase().includes(query) || s.barcode.toLowerCase().includes(query)) {
+                    select.innerHTML += `<option value="${s.id}">${s.name} (${s.spec || '無規格'}) [區域: ${s.zone || '1F'}] - 庫存: ${s.qty}</option>`;
+                }
+            });
+        }
+
+        function submitOutstock(e) {
+            e.preventDefault();
+            const stkId = document.getElementById('outProductSelect').value;
+            const q = parseInt(document.getElementById('outQty').value);
+            const stock = stockList.find(s => s.id === stkId);
+
+            if (stock) {
+                if (stock.qty < q) { alert('出庫數量大於當前庫存量！'); return; }
+                stock.qty -= q;
+                closeOutstockModal();
+                renderAll();
+            }
+        }
+
+        function renderStocktakeTable() {
+            const tbody = document.getElementById('stocktakeTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            const selectedZone = document.getElementById('stocktakeZoneFilter').value;
+
+            stockList.filter(s => s.store === currentStore && (s.zone || '1F') === selectedZone).forEach(s => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 font-medium">${s.name} (${s.spec || '-'})</td>
+                        <td class="p-3">$${s.price}</td>
+                        <td class="p-3 font-bold text-slate-700">${s.qty}</td>
+                        <td class="p-3"><input type="number" id="actual_${s.id}" value="${s.qty}" oninput="calcDiff('${s.id}', ${s.qty}, ${s.price})" class="w-24 border border-slate-300 rounded px-2 py-1 text-sm"></td>
+                        <td class="p-3 font-bold" id="diffQty_${s.id}">0</td>
+                        <td class="p-3 font-bold" id="diffAmt_${s.id}">$0</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function calcDiff(id, systemQty, price) {
+            const actual = parseInt(document.getElementById(`actual_${id}`).value) || 0;
+            const diff = actual - systemQty;
+            const amt = diff * price;
+            const qElem = document.getElementById(`diffQty_${id}`);
+            const aElem = document.getElementById(`diffAmt_${id}`);
+            if(!qElem || !aElem) return;
+
+            qElem.innerText = diff > 0 ? `+${diff}` : diff;
+            qElem.className = `p-3 font-bold ${diff < 0 ? 'text-rose-600' : diff > 0 ? 'text-emerald-600' : 'text-slate-700'}`;
+            aElem.innerText = amt >= 0 ? `+$${amt.toLocaleString()}` : `-$${Math.abs(amt).toLocaleString()}`;
+            aElem.className = `p-3 font-bold ${amt < 0 ? 'text-rose-600' : amt > 0 ? 'text-emerald-600' : 'text-slate-700'}`;
+        }
+
+        function saveStocktake() {
+            const selectedZone = document.getElementById('stocktakeZoneFilter').value;
+            stockList.filter(s => s.store === currentStore && (s.zone || '1F') === selectedZone).forEach(s => {
+                const elem = document.getElementById(`actual_${s.id}`);
+                if (elem) s.qty = parseInt(elem.value) || 0;
+            });
+            alert(`實際盤點資料 (${selectedZone}) 已儲存並校正庫存量！`);
+            renderAll();
+        }
+
+        function renderMachinesTable() {
+            const tbody = document.getElementById('machinesTableBody');
+            const tfoot = document.getElementById('machinesTableFooter');
+            if(!tbody || !tfoot) return;
+            tbody.innerHTML = ''; tfoot.innerHTML = '';
+
+            const searchVal = document.getElementById('machineSearchInput').value.toLowerCase().trim();
+            const startDate = document.getElementById('machineStartDate').value;
+            const endDate = document.getElementById('machineEndDate').value;
+            const sortVal = document.getElementById('machineSortSelect').value;
+
+            let filtered = machineRecords.filter(m => {
+                if (searchVal && !m.productName.toLowerCase().includes(searchVal)) return false;
+                if (startDate && m.date < startDate) return false;
+                if (endDate && m.date > endDate) return false;
+                return true;
+            });
+
+            filtered.sort((a, b) => {
+                if (sortVal === 'date_desc') return b.date.localeCompare(a.date);
+                if (sortVal === 'date_asc') return a.date.localeCompare(b.date);
+                if (sortVal === 'rev_desc') return b.revenue - a.revenue;
+                if (sortVal === 'net_desc') return b.netProfit - a.netProfit;
+                return 0;
+            });
+
+            let totRevenue = 0, totOutQty = 0, totPoints = 0, totExchangeQty = 0, totCost = 0, totScratchExp = 0, totNetProfit = 0;
+
+            filtered.forEach(m => {
+                totRevenue += m.revenue; totOutQty += m.outQty;
+                totPoints += (m.points || 0); totExchangeQty += (m.exchangeQty || 0);
+                totCost += m.cost; totScratchExp += m.scratchExp; totNetProfit += m.netProfit;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 text-slate-500">${m.date}</td>
+                        <td class="p-3 font-bold text-blue-600">${m.machineNo}</td>
+                        <td class="p-3 font-medium">${m.productName}</td>
+                        <td class="p-3 text-emerald-600 font-bold">+$${m.revenue.toLocaleString()}</td>
+                        <td class="p-3 font-bold">${m.outQty}</td>
+                        <td class="p-3 text-slate-600">${m.points || 0} P / ${m.exchangeQty || 0}個</td>
+                        <td class="p-3 text-rose-600">-$${m.cost.toLocaleString()}</td>
+                        <td class="p-3 text-amber-600">-$${m.scratchExp.toLocaleString()}</td>
+                        <td class="p-3 font-bold text-lg ${m.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">$${m.netProfit.toLocaleString()}</td>
+                    </tr>
+                `;
+            });
+
+            if (filtered.length > 0) {
+                tfoot.innerHTML = `
+                    <tr>
+                        <td class="p-3 text-slate-700" colspan="3"><span class="text-base font-extrabold text-slate-800">總計（共 ${filtered.length} 筆）</span></td>
+                        <td class="p-3 text-emerald-600 font-extrabold text-base">+$${totRevenue.toLocaleString()}</td>
+                        <td class="p-3 text-slate-800 font-extrabold text-base">${totOutQty}</td>
+                        <td class="p-3 text-slate-700 font-bold">${totPoints} P / ${totExchangeQty}個</td>
+                        <td class="p-3 text-rose-600 font-extrabold text-base">-$${totCost.toLocaleString()}</td>
+                        <td class="p-3 text-amber-600 font-extrabold text-base">-$${totScratchExp.toLocaleString()}</td>
+                        <td class="p-3 font-extrabold text-xl ${totNetProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}">$${totNetProfit.toLocaleString()}</td>
+                    </tr>
+                `;
+            } else {
+                tbody.innerHTML = `<tr><td colspan="9" class="p-6 text-center text-slate-400">查無符合條件的機台數據</td></tr>`;
+            }
+        }
+
+        function downloadMachineCSVTemplate() {
+            const csvContent = "機檯編號,商品名稱,商品單價,收入金額,今日出錶結算,出貨金額(刮獎)\r\nA01,45cm 巨無霸娃娃,250,3500,5,200";
+            downloadCSVFile("機台幣量匯入範本_6欄位.csv", csvContent);
+        }
+
+        function openMachineUploadModal() { document.getElementById('machineUploadModal').classList.remove('hidden'); }
+        function closeMachineUploadModal() { document.getElementById('machineUploadModal').classList.add('hidden'); }
+        function openPointsModal() { document.getElementById('pointsModal').classList.remove('hidden'); }
+        function closePointsModal() { document.getElementById('pointsModal').classList.add('hidden'); }
+
+        function submitBatchPoints(e) {
+            e.preventDefault();
+            const dateVal = document.getElementById('batchPointsDate').value;
+            const machineNoVal = document.getElementById('batchPointsMachineNo').value.trim();
+            const ptsVal = parseFloat(document.getElementById('batchPointsVal').value) || 0;
+            const exQtyVal = parseFloat(document.getElementById('batchPointsQty').value) || 0;
+
+            let foundCount = 0;
+            machineRecords.forEach(m => {
+                if (m.date === dateVal && m.machineNo === machineNoVal) {
+                    m.points = ptsVal; m.exchangeQty = exQtyVal; foundCount++;
+                }
+            });
+            closePointsModal();
+            renderAll();
+            alert(`已成功帶入換點資料（更新 ${foundCount} 筆機台記錄）！`);
+        }
+
+        function parseCSVLine(text) {
+            let result = [], current = '', inQuotes = false;
+            for (let i = 0; i < text.length; i++) {
+                let char = text[i];
+                if (char === '"') {
+                    if (inQuotes && text[i + 1] === '"') { current += '"'; i++; }
+                    else { inQuotes = !inQuotes; }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim()); current = '';
+                } else { current += char; }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        function confirmMachineCSVUpload() {
+            const dateInput = document.getElementById('targetMachineDate').value;
+            const fileInput = document.getElementById('machineCsvFileInput');
+            const file = fileInput.files[0];
+            if (!dateInput || !file) { alert('請完整填寫日期並選擇 CSV！'); return; }
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                machineRecords = machineRecords.filter(m => m.date !== dateInput);
+                const lines = evt.target.result.split(/\r\n|\n/);
+                for (let i = 1; i < lines.length; i++) {
+                    if (!lines[i].trim()) continue;
+                    const row = parseCSVLine(lines[i]);
+                    if (row.length >= 6) {
+                        const mNo = row[0].replace(/^["']|["']$/g, '');
+                        const pName = row[1].replace(/^["']|["']$/g, '');
+                        const price = parseFloat(row[2].replace(/,/g, '')) || 0;
+                        const rev = parseFloat(row[3].replace(/,/g, '')) || 0;
+                        const outQ = parseFloat(row[4].replace(/,/g, '')) || 0;
+                        const scratch = parseFloat(row[5].replace(/,/g, '')) || 0;
+                        const cost = outQ * price;
+                        const netProfit = rev - cost - scratch;
+
+                        machineRecords.unshift({
+                            date: dateInput, machineNo: mNo, productName: pName,
+                            price: price, revenue: rev, outQty: outQ,
+                            points: 0, exchangeQty: 0, cost: cost, scratchExp: scratch, netProfit: netProfit
+                        });
+                    }
+                }
+                closeMachineUploadModal();
+                fileInput.value = '';
+                renderAll();
+                alert(`機台幣量 CSV 匯入成功！`);
+            };
+            reader.readAsText(file);
+        }
+
+        function renderSupplierReport() {
+            const tbody = document.getElementById('supplierReportTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            const selectedMonth = document.getElementById('supplierMonthFilter').value;
+            let monthTotal = 0, monthCount = 0;
+
+            purchaseOrders.filter(o => o.store === currentStore).forEach(o => {
+                if (o.orderDate.startsWith(selectedMonth)) {
+                    monthTotal += o.total; monthCount++;
+                    tbody.innerHTML += `
+                        <tr>
+                            <td class="p-3 font-bold text-slate-800">${o.supplier}</td>
+                            <td class="p-3 font-mono text-xs text-slate-500">${o.id}</td>
+                            <td class="p-3">${o.orderDate}</td>
+                            <td class="p-3">${o.name} (${o.spec || '-'})</td>
+                            <td class="p-3">${o.qty}</td>
+                            <td class="p-3">$${o.price}</td>
+                            <td class="p-3 font-bold text-slate-700">$${o.total.toLocaleString()}</td>
+                            <td class="p-3">${o.arrivePerson || '-'}</td>
+                        </tr>
+                    `;
+                }
+            });
+            document.getElementById('supplierTotalAmount').innerText = `$${monthTotal.toLocaleString()}`;
+            document.getElementById('supplierTotalCount').innerText = `總叫貨筆數：${monthCount} 筆`;
+        }
+
+        function renderPaymentCheckTable() {
+            const tbody = document.getElementById('paymentCheckTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            let totalOrderAmt = 0, totalPaidAmt = 0;
+
+            paymentRecords.filter(p => p.store === currentStore).forEach(p => {
+                totalOrderAmt += p.orderAmt; totalPaidAmt += p.paidAmt;
+                const diff = p.orderAmt - p.paidAmt;
+                const hasDiff = diff !== 0;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 text-slate-500">${p.date}</td>
+                        <td class="p-3 font-bold text-slate-800">${p.supplier}</td>
+                        <td class="p-3 font-mono text-xs text-blue-600">${p.orderId || '-'}</td>
+                        <td class="p-3">${p.arriveDate || '<span class="text-xs text-amber-600 font-semibold">貨未到</span>'}</td>
+                        <td class="p-3 font-bold ${hasDiff ? 'text-rose-600 bg-rose-50 px-2 py-1 rounded' : ''}">$${p.orderAmt.toLocaleString()}</td>
+                        <td class="p-3 font-bold text-emerald-600">$${p.paidAmt.toLocaleString()}</td>
+                        <td class="p-3 font-bold ${hasDiff ? 'text-rose-600' : 'text-slate-600'}">$${diff.toLocaleString()}</td>
+                        <td class="p-3 text-xs text-slate-500">${p.note || '-'}</td>
+                        <td class="p-3 text-right">
+                            ${currentRole === 'boss' ? `<button onclick="confirmDelete('payment', '${p.id}')" class="text-rose-600 hover:underline">刪除</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+            const unpaid = totalOrderAmt - totalPaidAmt;
+            document.getElementById('pcTotalOrderAmt').innerText = `$${totalOrderAmt.toLocaleString()}`;
+            document.getElementById('pcTotalPaidAmt').innerText = `$${totalPaidAmt.toLocaleString()}`;
+            document.getElementById('pcTotalUnpaidAmt').innerText = `$${unpaid.toLocaleString()}`;
+        }
+
+        function openPaymentModal() {
+            const selectOrder = document.getElementById('payRecSelectOrder');
+            selectOrder.innerHTML = `<option value="">-- 手動自由輸入 (或選擇現有訂單代入) --</option>`;
+            purchaseOrders.filter(o => o.store === currentStore).forEach(o => {
+                selectOrder.innerHTML += `<option value="${o.id}">${o.id} - ${o.supplier} (${o.name}) 金額: $${o.total}</option>`;
+            });
+            document.getElementById('payRecSupplier').value = '';
+            document.getElementById('payRecOrderIdInput').value = '';
+            document.getElementById('payRecArriveDate').value = '';
+            document.getElementById('payRecOrderAmt').value = '0';
+            document.getElementById('payRecPaidAmt').value = '0';
+            document.getElementById('payRecNote').value = '貨未到先付款';
+            document.getElementById('paymentModal').classList.remove('hidden');
+        }
+        function closePaymentModal() { document.getElementById('paymentModal').classList.add('hidden'); }
+
+        function onSelectPurchaseOrderForPayment() {
+            const orderId = document.getElementById('payRecSelectOrder').value;
+            if (!orderId) return;
+            const order = purchaseOrders.find(o => o.id === orderId);
+            if (order) {
+                document.getElementById('payRecSupplier').value = order.supplier;
+                document.getElementById('payRecOrderIdInput').value = order.id;
+                document.getElementById('payRecArriveDate').value = order.arriveDate || '';
+                document.getElementById('payRecOrderAmt').value = order.total;
+                document.getElementById('payRecPaidAmt').value = order.total;
+            }
+        }
+
+        function submitPaymentRecord(e) {
+            e.preventDefault();
+            const supplierInput = document.getElementById('payRecSupplier').value.trim();
+            checkAndAddSupplier(supplierInput);
+
+            paymentRecords.push({
+                id: 'PAY' + new Date().getTime().toString().slice(-4),
+                store: currentStore,
+                date: document.getElementById('payRecDate').value,
+                supplier: supplierInput,
+                orderId: document.getElementById('payRecOrderIdInput').value || 'MANUAL',
+                arriveDate: document.getElementById('payRecArriveDate').value,
+                orderAmt: parseFloat(document.getElementById('payRecOrderAmt').value) || 0,
+                paidAmt: parseFloat(document.getElementById('payRecPaidAmt').value) || 0,
+                note: document.getElementById('payRecNote').value
+            });
+            closePaymentModal();
+            renderAll();
+        }
+
+        function renderCashflowTable() {
+            const tbody = document.getElementById('cashflowTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+
+            cashflowRecords.filter(c => c.store === currentStore).forEach(c => {
+                const cashflow = c.prevBalance + c.machineRev - c.expense - c.loanPayment;
+                const loanTotal = c.prevBalance + c.cashTransfer - c.loanPayment;
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 text-slate-500">${c.date}</td>
+                        <td class="p-3">$${c.prevBalance.toLocaleString()}</td>
+                        <td class="p-3 text-emerald-600 font-bold">+$${c.machineRev.toLocaleString()}</td>
+                        <td class="p-3 text-blue-600 font-bold">+$${c.cashTransfer.toLocaleString()}</td>
+                        <td class="p-3 text-rose-600">-$${c.expense.toLocaleString()}</td>
+                        <td class="p-3 text-amber-600">-$${c.loanPayment.toLocaleString()}</td>
+                        <td class="p-3 font-bold text-lg text-blue-700">$${cashflow.toLocaleString()}</td>
+                        <td class="p-3 font-bold text-lg text-purple-700">$${loanTotal.toLocaleString()}</td>
+                        <td class="p-3 text-right">
+                            ${currentRole === 'boss' ? `<button onclick="confirmDelete('cashflow', '${c.id}')" class="text-rose-600 hover:underline">刪除</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openCashflowModal() { document.getElementById('cashflowModal').classList.remove('hidden'); }
+        function closeCashflowModal() { document.getElementById('cashflowModal').classList.add('hidden'); }
+
+        function submitCashflowRecord(e) {
+            e.preventDefault();
+            const dateVal = document.getElementById('cfDate').value;
+            cashflowRecords = cashflowRecords.filter(c => !(c.store === currentStore && c.date === dateVal));
+
+            cashflowRecords.push({
+                id: 'CF' + new Date().getTime().toString().slice(-4),
+                store: currentStore,
+                date: dateVal,
+                prevBalance: parseFloat(document.getElementById('cfPrevBalance').value) || 0,
+                machineRev: parseFloat(document.getElementById('cfMachineRev').value) || 0,
+                cashTransfer: parseFloat(document.getElementById('cfCashTransfer').value) || 0,
+                expense: parseFloat(document.getElementById('cfExpense').value) || 0,
+                loanPayment: parseFloat(document.getElementById('cfLoanPayment').value) || 0
+            });
+            closeCashflowModal();
+            renderAll();
+        }
+
+        function renderAccountingReport() {
+            const tbody = document.getElementById('accountingFullTableBody');
+            if(!tbody) return;
+            tbody.innerHTML = '';
+            const selectedMonth = document.getElementById('accMonthFilter').value;
+
+            let revenue = 0;
+            machineRecords.forEach(m => { if(m.date.startsWith(selectedMonth)) revenue += m.revenue; });
+
+            let otherRev = 0, freeCoins = 0, shopExpenses = 0, salary = 0;
+            storeExpenses.filter(e => e.store === currentStore && e.date.startsWith(selectedMonth)).forEach(e => {
+                if (e.category === '其他收入') otherRev += e.amount;
+                else if (e.category === '免費幣') freeCoins += e.amount;
+                else if (e.category === '店支出') shopExpenses += e.amount;
+                else if (e.category === '員工薪資') salary += e.amount;
+            });
+
+            let prevStockValue = 120000;
+            let purchaseThisMonth = 0;
+            purchaseOrders.filter(o => o.store === currentStore && o.orderDate.startsWith(selectedMonth)).forEach(o => { purchaseThisMonth += o.total; });
+
+            let pointRecycle = 0;
+            machineRecords.forEach(m => { if(m.date.startsWith(selectedMonth)) pointRecycle += (m.points || 0) * 10; });
+
+            let pointExchangeCost = 0;
+            machineRecords.forEach(m => { if(m.date.startsWith(selectedMonth)) pointExchangeCost += (m.exchangeQty || 0) * (m.price || 100); });
+
+            let activityPrizeCost = 0;
+            machineRecords.forEach(m => { if(m.date.startsWith(selectedMonth)) activityPrizeCost += m.scratchExp; });
+
+            let shipOutCost = 0;
+            machineRecords.forEach(m => { if(m.date.startsWith(selectedMonth)) shipOutCost += m.cost; });
+
+            let monthlyDiff = -500;
+            let currentStockValue = 0;
+            stockList.filter(s => s.store === currentStore).forEach(s => { currentStockValue += s.qty * s.price; });
+
+            let stockChange = currentStockValue - prevStockValue;
+            let unexchangedPointsVal = 15000;
+            let netProfit = revenue + otherRev - freeCoins - shopExpenses - salary + stockChange + monthlyDiff;
+            let prevTotalAsset = 1000000;
+            let currentTotalAsset = prevTotalAsset + netProfit;
+
+            const rows = [
+                { name: '營收 (+)', val: revenue, note: '機台幣量總收入連動', cls: 'text-emerald-600 font-bold' },
+                { name: '其他收入 (+)', val: otherRev, note: '雜項或活動其他收入', cls: 'text-emerald-600 font-bold' },
+                { name: '免費幣 (-)', val: freeCoins, note: '贈送或促銷免費幣成本', cls: 'text-rose-600 font-bold' },
+                { name: '店支出 (-)', val: shopExpenses, note: '房租、水電及日常雜支', cls: 'text-rose-600 font-bold' },
+                { name: '員工薪資 (-)', val: salary, note: '正職與兼職人員薪資', cls: 'text-rose-600 font-bold' },
+                { name: '未兌換點數實際金額', val: unexchangedPointsVal, note: '流通在外未兌換點數之預估金額', cls: 'text-slate-700 font-bold' },
+                { name: '上月庫存剩餘', val: prevStockValue, note: '上一期結算庫存總金額', cls: 'text-slate-700' },
+                { name: '本月進貨 (+)', val: purchaseThisMonth, note: '本月叫貨入庫總成本', cls: 'text-blue-600 font-bold' },
+                { name: '商品收回換點數 (+)', val: pointRecycle, note: '玩家商品回收換點數金額', cls: 'text-emerald-600 font-bold' },
+                { name: '本月商品兌換 (-)', val: pointExchangeCost, note: '點數兌換商品出庫成本', cls: 'text-rose-600 font-bold' },
+                { name: '本月活動贈獎 (-)', val: activityPrizeCost, note: '刮板及活動贈品出貨金額', cls: 'text-rose-600 font-bold' },
+                { name: '本月出貨 (-)', val: shipOutCost, note: '機台夾出商品總成本', cls: 'text-rose-600 font-bold' },
+                { name: '當月盤差', val: monthlyDiff, note: '實盤與帳面庫存盈虧差額', cls: monthlyDiff >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold' },
+                { name: '本月庫存剩餘', val: currentStockValue, note: '當前全店庫存剩餘價值', cls: 'text-slate-800 font-bold' },
+                { name: '庫存變動', val: stockChange, note: '本月庫存剩餘 - 上月庫存剩餘', cls: stockChange >= 0 ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold' },
+                { name: '上月總資產結餘', val: prevTotalAsset, note: '上一期結餘總資產', cls: 'text-slate-800 font-bold' },
+                { name: '本月損益', val: netProfit, note: '營收+其他收入-費用+庫存變動+盤差', cls: `text-xl font-extrabold ${netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}` },
+                { name: '本月總資產結餘', val: currentTotalAsset, note: '上月總資產結餘 + 本月損益', cls: 'text-xl font-extrabold text-blue-700 bg-blue-50' }
+            ];
+
+            rows.forEach(r => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="p-3 border border-slate-200 font-bold text-slate-800">${r.name}</td>
+                        <td class="p-3 border border-slate-200 text-right ${r.cls}">$${r.val.toLocaleString()}</td>
+                        <td class="p-3 border border-slate-200 text-xs text-slate-500">${r.note}</td>
+                    </tr>
+                `;
+            });
+        }
+
+        function addStoreExpense() {
+            const name = document.getElementById('expenseName').value.trim();
+            const category = document.getElementById('expenseCategory').value;
+            const amt = parseFloat(document.getElementById('expenseAmount').value);
+            if (!name || isNaN(amt) || amt <= 0) { alert('請填寫正確的名稱與金額！'); return; }
+
+            storeExpenses.push({
+                id: 'EXP' + new Date().getTime().toString().slice(-4),
+                store: currentStore,
+                date: new Date().toISOString().slice(0, 10),
+                category: category, name: name, amount: amt
+            });
+            document.getElementById('expenseName').value = '';
+            document.getElementById('expenseAmount').value = '';
+            renderAll();
+        }
+
+        function confirmDelete(type, id) {
+            deleteCallback = function() {
+                if (type === 'purchase') {
+                    const idx = purchaseOrders.findIndex(o => o.id === id);
+                    if (idx !== -1) {
+                        const order = purchaseOrders[idx];
+                        if (order.status === '已完放入庫') {
+                            const stk = stockList.find(s => s.store === order.store && s.name === order.name);
+                            if (stk) stk.qty = Math.max(0, stk.qty - order.qty);
+                        }
+                        purchaseOrders.splice(idx, 1);
+                    }
+                } else if (type === 'expense') {
+                    const idx = storeExpenses.findIndex(e => e.id === id);
+                    if (idx !== -1) storeExpenses.splice(idx, 1);
+                } else if (type === 'payment') {
+                    const idx = paymentRecords.findIndex(p => p.id === id);
+                    if (idx !== -1) paymentRecords.splice(idx, 1);
+                } else if (type === 'cashflow') {
+                    const idx = cashflowRecords.findIndex(c => c.id === id);
+                    if (idx !== -1) cashflowRecords.splice(idx, 1);
+                }
+                renderAll();
+                closeDeleteModal();
+            };
+            document.getElementById('deleteConfirmModal').classList.remove('hidden');
+        }
+
+        function closeDeleteModal() { document.getElementById('deleteConfirmModal').classList.add('hidden'); }
+        const confirmDeleteBtn = document.getElementById('confirmDeleteBtn');
+        if(confirmDeleteBtn) {
+            confirmDeleteBtn.onclick = function() { if (deleteCallback) deleteCallback(); };
+        }
+
+        function downloadCSVFile(filename, csvText) {
+            const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+            const blob = new Blob([bom, csvText], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function safeCSV(str) {
+            if (str === null || str === undefined) return '""';
+            let s = String(str).replace(/"/g, '""');
+            return `"${s}"`;
+        }
+
+        function exportMachinesReport() {
+            let csv = '日期,機檯編號,商品名稱,商品單價,收入金額,今日出錶結算,點數,兌換量,出貨金額(刮獎),淨利\r\n';
+            machineRecords.forEach(m => {
+                csv += `${safeCSV(m.date)},${safeCSV(m.machineNo)},${safeCSV(m.productName)},${m.price},${m.revenue},${m.outQty},${m.points || 0},${m.exchangeQty || 0},${m.scratchExp},${m.netProfit}\r\n`;
+            });
+            downloadCSVFile(`機台分析_${currentStore}.csv`, csv);
+        }
+
+        function exportSupplierReport() {
+            const selectedMonth = document.getElementById('supplierMonthFilter').value;
+            let csv = '廠商名稱,訂單編號,訂購日期,商品名稱,規格,訂購數量,單價,總金額,到貨登記人\r\n';
+            purchaseOrders.filter(o => o.store === currentStore && o.orderDate.startsWith(selectedMonth)).forEach(o => {
+                csv += `${safeCSV(o.supplier)},${safeCSV(o.id)},${safeCSV(o.orderDate)},${safeCSV(o.name)},${safeCSV(o.spec)},${o.qty},${o.price},${o.total},${safeCSV(o.arrivePerson)}\r\n`;
+            });
+            downloadCSVFile(`廠商進貨明細_${selectedMonth}.csv`, csv);
+        }
+
+        function exportMonthlyReport() {
+            const selectedMonth = document.getElementById('accMonthFilter').value;
+            let csv = '會計核對欄位,金額 (元)\r\n';
+            const rows = document.querySelectorAll('#accountingFullTableBody tr');
+            rows.forEach(r => {
+                const cols = r.querySelectorAll('td');
+                if(cols.length >= 2) {
+                    csv += `${safeCSV(cols[0].innerText)},${safeCSV(cols[1].innerText.replace('$', '').replace(/,/g, ''))}\r\n`;
+                }
+            });
+            downloadCSVFile(`會計損益月報表_${selectedMonth}_${currentStore}.csv`, csv);
+        }
+    </script>
+</body>
+</html>
